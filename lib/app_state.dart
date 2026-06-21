@@ -12,7 +12,50 @@ class AppState extends ChangeNotifier {
   List<ExamQuestion> examQuestions = [];
   List<QuestionScore> questionScores = [];
   List<LessonPlan> plans = [];
+  List<SchoolClass> classes = [];
+  List<ClassroomScore> classroomScores = [];
   bool loading = false;
+
+  List<String> get classNames {
+    final fromStudents = students.map((s) => s.className).whereType<String>();
+    final fromClasses = classes.map((c) => c.name);
+    return {...fromStudents, ...fromClasses}.toList()..sort();
+  }
+
+  List<Student> studentsInClass(String className) {
+    final list = students.where((s) => s.className == className).toList();
+    list.sort((a, b) =>
+        (int.tryParse(a.studentNumber ?? '') ?? 0)
+            .compareTo(int.tryParse(b.studentNumber ?? '') ?? 0));
+    return list;
+  }
+
+  ClassroomScore? classroomScoreFor(String studentId, int semester) {
+    try {
+      return classroomScores.firstWhere(
+          (c) => c.studentId == studentId && c.semester == semester);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  double? writtenAvg(String studentId, int semester) {
+    final g = gradeFor(studentId, semester);
+    if (g == null) return null;
+    final vals = [g.w1, g.w2].whereType<double>().toList();
+    if (vals.isEmpty) return null;
+    return vals.reduce((a, b) => a + b) / vals.length;
+  }
+
+  double? calcOral(String studentId, int semester) {
+    final avg = writtenAvg(studentId, semester);
+    if (avg == null) return null;
+    final cls = classroomScoreFor(studentId, semester)?.classroomScore ?? 0;
+    var v = avg + cls / 2;
+    if (v > 100) v = 100;
+    if (v < 0) v = 0;
+    return v.roundToDouble();
+  }
 
   Grade? gradeFor(String studentId, int semester) {
     try {
@@ -83,6 +126,8 @@ class AppState extends ChangeNotifier {
             .from('teacher_plans')
             .select()
             .order('created_at', ascending: false),
+        supabase.from('classes').select().order('name'),
+        supabase.from('nm_classroom_scores').select(),
       ]);
       students =
           (results[0] as List).map((e) => Student.fromMap(e)).toList();
@@ -95,6 +140,9 @@ class AppState extends ChangeNotifier {
       questionScores =
           (results[5] as List).map((e) => QuestionScore.fromMap(e)).toList();
       plans = (results[6] as List).map((e) => LessonPlan.fromMap(e)).toList();
+      classes = (results[7] as List).map((e) => SchoolClass.fromMap(e)).toList();
+      classroomScores =
+          (results[8] as List).map((e) => ClassroomScore.fromMap(e)).toList();
     } finally {
       loading = false;
       notifyListeners();
@@ -280,5 +328,240 @@ class AppState extends ChangeNotifier {
     await supabase.from('teacher_plans').delete().eq('id', id);
     plans.removeWhere((p) => p.id == id);
     notifyListeners();
+  }
+
+  // ── Sınıflarım ──
+  Future<String?> createClass(String name) async {
+    if (classNames.contains(name)) return 'Bu sınıf zaten var';
+    try {
+      final data =
+          await supabase.from('classes').insert({'name': name}).select().single();
+      classes.add(SchoolClass.fromMap(data));
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> deleteClass(String name) async {
+    try {
+      final ids = studentsInClass(name).map((s) => s.id).toList();
+      if (ids.isNotEmpty) {
+        await supabase.from('teacher_students').delete().inFilter('id', ids);
+      }
+      final still = await supabase
+          .from('teacher_students')
+          .select('id')
+          .eq('class_name', name)
+          .limit(1);
+      if ((still as List).isNotEmpty) {
+        return 'Bazı öğrenciler silinemedi (yetki sorunu olabilir).';
+      }
+      students.removeWhere((s) => s.className == name);
+      grades.removeWhere((g) => ids.contains(g.studentId));
+      scores.removeWhere((s) => ids.contains(s.studentId));
+      scoreHistory.removeWhere((h) => ids.contains(h.studentId));
+      classroomScores.removeWhere((c) => ids.contains(c.studentId));
+      final classRow = classes.where((c) => c.name == name).toList();
+      if (classRow.isNotEmpty) {
+        await supabase.from('classes').delete().eq('id', classRow.first.id);
+        classes.removeWhere((c) => c.name == name);
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> addStudentToClass(
+      String className, String studentNumber, String name) async {
+    final dup = students.any((s) =>
+        s.className == className && s.studentNumber == studentNumber);
+    if (dup) return 'Bu sınıfta $studentNumber numaralı öğrenci zaten var';
+    try {
+      final data = await supabase
+          .from('teacher_students')
+          .insert({
+            'name': name,
+            'student_number': studentNumber,
+            'class_name': className,
+          })
+          .select()
+          .single();
+      students.add(Student.fromMap(data));
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> importStudentsToClass(
+      String className, List<(String no, String name)> rows) async {
+    int added = 0;
+    final dups = <String>[];
+    for (final (no, name) in rows) {
+      final exists = students.any(
+          (s) => s.className == className && s.studentNumber == no);
+      if (exists) {
+        dups.add(no);
+        continue;
+      }
+      try {
+        final data = await supabase
+            .from('teacher_students')
+            .insert({
+              'name': name,
+              'student_number': no,
+              'class_name': className,
+            })
+            .select()
+            .single();
+        students.add(Student.fromMap(data));
+        added++;
+      } catch (e) {
+        dups.add('$no (hata)');
+      }
+    }
+    notifyListeners();
+    if (added == 0 && dups.isEmpty) return 'Geçerli satır bulunamadı';
+    return null;
+  }
+
+  Future<String?> deleteStudent(String studentId) async {
+    try {
+      final ids = [studentId];
+      await supabase.from('teacher_students').delete().inFilter('id', ids);
+      final still = await supabase
+          .from('teacher_students')
+          .select('id')
+          .eq('id', studentId)
+          .limit(1);
+      if ((still as List).isNotEmpty) {
+        return 'Kayıt silinemedi (yetki sorunu olabilir).';
+      }
+      students.removeWhere((s) => s.id == studentId);
+      grades.removeWhere((g) => g.studentId == studentId);
+      scores.removeWhere((s) => s.studentId == studentId);
+      scoreHistory.removeWhere((h) => h.studentId == studentId);
+      classroomScores.removeWhere((c) => c.studentId == studentId);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  // ── Not Merkezi ──
+  Future<String?> setClassroomScore(
+      String studentId, int semester, double? value) async {
+    try {
+      final existing = classroomScoreFor(studentId, semester);
+      if (existing != null) {
+        await supabase
+            .from('nm_classroom_scores')
+            .update({'classroom_score': value})
+            .eq('id', existing.id);
+        existing.classroomScore = value;
+      } else {
+        final data = await supabase
+            .from('nm_classroom_scores')
+            .insert({
+              'student_id': studentId,
+              'semester': semester,
+              'classroom_score': value,
+            })
+            .select()
+            .single();
+        classroomScores.add(ClassroomScore.fromMap(data));
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> setOralManual(
+      String studentId, int semester, double? value) async {
+    final err = await saveGrade(studentId, semester, 'oral', value);
+    if (err != null) return err;
+    try {
+      final existing = classroomScoreFor(studentId, semester);
+      if (existing != null) {
+        await supabase
+            .from('nm_classroom_scores')
+            .update({'is_manual_oral': true})
+            .eq('id', existing.id);
+        existing.isManualOral = true;
+      } else {
+        final data = await supabase
+            .from('nm_classroom_scores')
+            .insert({
+              'student_id': studentId,
+              'semester': semester,
+              'is_manual_oral': true,
+            })
+            .select()
+            .single();
+        classroomScores.add(ClassroomScore.fromMap(data));
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> resetOralToAuto(String studentId, int semester) async {
+    final calc = calcOral(studentId, semester);
+    if (calc == null) return 'Yazılı notu olmadan otomatik hesaplanamaz';
+    final err = await saveGrade(studentId, semester, 'oral', calc);
+    if (err != null) return err;
+    final existing = classroomScoreFor(studentId, semester);
+    if (existing != null) {
+      await supabase
+          .from('nm_classroom_scores')
+          .update({'is_manual_oral': false})
+          .eq('id', existing.id);
+      existing.isManualOral = false;
+      notifyListeners();
+    }
+    return null;
+  }
+
+  Future<String?> resetStudentGrade(String studentId, int semester) async {
+    final g = gradeFor(studentId, semester);
+    if (g == null) return 'Bu dönem için not yok';
+    try {
+      await supabase.from('teacher_grades').delete().eq('id', g.id);
+      grades.removeWhere((x) => x.id == g.id);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> resetClassGrades(String className, int semester) async {
+    final ids = studentsInClass(className).map((s) => s.id).toList();
+    final targetGradeIds = grades
+        .where((g) => g.semester == semester && ids.contains(g.studentId))
+        .map((g) => g.id)
+        .toList();
+    if (targetGradeIds.isEmpty) return 'Sıfırlanacak not yok';
+    try {
+      await supabase
+          .from('teacher_grades')
+          .delete()
+          .inFilter('id', targetGradeIds);
+      grades.removeWhere((g) => targetGradeIds.contains(g.id));
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
   }
 }

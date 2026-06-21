@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../app_state.dart';
 import 'dashboard_screen.dart';
+import 'classes_screen.dart';
 import 'students_screen.dart';
 import 'grades_screen.dart';
 import 'analysis_screen.dart';
 import 'scores_screen.dart';
 import 'plans_screen.dart';
+import 'not_merkezi_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -21,11 +23,13 @@ class _HomeShellState extends State<HomeShell> {
 
   final pages = const [
     {'icon': Icons.home_rounded, 'label': 'Ana Ekran', 'page': DashboardScreen()},
+    {'icon': Icons.school_rounded, 'label': 'Sınıflarım', 'page': ClassesScreen()},
     {'icon': Icons.groups_rounded, 'label': 'Öğrenciler', 'page': StudentsScreen()},
     {'icon': Icons.edit_note_rounded, 'label': 'Not Defteri', 'page': GradesScreen()},
     {'icon': Icons.science_rounded, 'label': 'Madde Analizi', 'page': AnalysisScreen()},
     {'icon': Icons.star_rounded, 'label': 'Puan Sistemi', 'page': ScoresScreen()},
     {'icon': Icons.menu_book_rounded, 'label': 'Ders Planları', 'page': PlansScreen()},
+    {'icon': Icons.folder_special_rounded, 'label': 'Not Merkezi', 'page': NotMerkeziScreen()},
   ];
 
   @override

@@ -1,3 +1,37 @@
+class SchoolClass {
+  final String id;
+  final String name;
+
+  SchoolClass({required this.id, required this.name});
+
+  factory SchoolClass.fromMap(Map<String, dynamic> m) =>
+      SchoolClass(id: m['id'], name: m['name']);
+}
+
+class ClassroomScore {
+  final String id;
+  final String studentId;
+  final int semester;
+  double? classroomScore;
+  bool isManualOral;
+
+  ClassroomScore({
+    required this.id,
+    required this.studentId,
+    required this.semester,
+    this.classroomScore,
+    this.isManualOral = false,
+  });
+
+  factory ClassroomScore.fromMap(Map<String, dynamic> m) => ClassroomScore(
+        id: m['id'],
+        studentId: m['student_id'],
+        semester: m['semester'],
+        classroomScore: (m['classroom_score'] as num?)?.toDouble(),
+        isManualOral: m['is_manual_oral'] ?? false,
+      );
+}
+
 class Student {
   final String id;
   String name;
