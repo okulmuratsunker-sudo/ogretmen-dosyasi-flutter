@@ -22,13 +22,22 @@ const _gradeCols = [
 class _GradesScreenState extends State<GradesScreen> {
   int sem = 1;
   String query = '';
+  String? classFilter;
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
-    final list = s.students
+    final classes = s.classNames;
+    if (classFilter != null && !classes.contains(classFilter)) classFilter = null;
+    var list = s.students
         .where((st) => query.isEmpty || st.name.toLowerCase().contains(query.toLowerCase()))
         .toList();
+    if (classFilter != null) {
+      list = list.where((st) => st.className == classFilter).toList();
+    }
+    list.sort((a, b) =>
+        (int.tryParse(a.studentNumber ?? '') ?? 0)
+            .compareTo(int.tryParse(b.studentNumber ?? '') ?? 0));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,6 +57,25 @@ class _GradesScreenState extends State<GradesScreen> {
                 selected: {sem},
                 onSelectionChanged: (s) => setState(() => sem = s.first),
               ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Tümü'),
+                selected: classFilter == null,
+                onSelected: (_) => setState(() => classFilter = null),
+              ),
+              for (final c in classes)
+                ChoiceChip(
+                  label: Text(c),
+                  selected: classFilter == c,
+                  onSelected: (_) => setState(() => classFilter = c),
+                ),
             ],
           ),
         ),
