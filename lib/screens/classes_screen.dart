@@ -79,9 +79,18 @@ class _ClassesScreenState extends State<ClassesScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'txt'],
+      withData: true,
     );
-    if (result == null || result.files.single.bytes == null) return;
-    final text = utf8.decode(result.files.single.bytes!, allowMalformed: true);
+    if (result == null) return;
+    final bytes = result.files.single.bytes;
+    if (bytes == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Dosya okunamadı.')));
+      }
+      return;
+    }
+    final text = utf8.decode(bytes, allowMalformed: true);
     final lines = text.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty);
     final rows = <(String, String)>[];
     for (final line in lines) {
