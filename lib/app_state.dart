@@ -398,27 +398,26 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<String?> importStudentsToClass(
-      String className, List<(String no, String name, double? y1, double? y2)> rows,
+  Future<String?> importStudentsToClass(String className, List<ImportRow> rows,
       {int? semester}) async {
     int added = 0;
     int gradesWritten = 0;
     final dups = <String>[];
-    for (final (no, name, y1, y2) in rows) {
+    for (final row in rows) {
       final existing = students
-          .where((s) => s.className == className && s.studentNumber == no)
+          .where((s) => s.className == className && s.studentNumber == row.no)
           .toList();
       String? studentId;
       if (existing.isNotEmpty) {
-        dups.add(no);
+        dups.add(row.no);
         studentId = existing.first.id;
       } else {
         try {
           final data = await supabase
               .from('teacher_students')
               .insert({
-                'name': name,
-                'student_number': no,
+                'name': row.name,
+                'student_number': row.no,
                 'class_name': className,
               })
               .select()
@@ -428,17 +427,22 @@ class AppState extends ChangeNotifier {
           studentId = st.id;
           added++;
         } catch (e) {
-          dups.add('$no (hata)');
+          dups.add('${row.no} (hata)');
           continue;
         }
       }
       if (semester != null) {
-        if (y1 != null) {
-          final err = await saveGrade(studentId, semester, 'w1', y1);
-          if (err == null) gradesWritten++;
-        }
-        if (y2 != null) {
-          final err = await saveGrade(studentId, semester, 'w2', y2);
+        final fields = {
+          'w1': row.y1,
+          'w2': row.y2,
+          'perf': row.perf1,
+          'perf2': row.perf2,
+          'project': row.proje1,
+          'proj2': row.proje2,
+        };
+        for (final entry in fields.entries) {
+          if (entry.value == null) continue;
+          final err = await saveGrade(studentId, semester, entry.key, entry.value);
           if (err == null) gradesWritten++;
         }
       }

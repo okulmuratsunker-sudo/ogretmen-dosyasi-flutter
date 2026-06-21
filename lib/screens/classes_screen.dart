@@ -76,7 +76,6 @@ class _ClassesScreenState extends State<ClassesScreen> {
   }
 
   Future<void> _importExcel() async {
-    if (selectedClass == null) return;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'txt', 'xls'],
@@ -86,16 +85,16 @@ class _ClassesScreenState extends State<ClassesScreen> {
     final path = result.files.single.path;
     final name = result.files.single.name.toLowerCase();
 
-    List<(String, String, double?, double?)> rows;
+    List<ImportRow> rows;
     int? detectedSemester;
-    String? defaultClassName;
+    String? detectedClassName;
 
     if (name.endsWith('.xls') && path != null) {
       try {
         final parsed = _parseEokulXls(path);
         rows = parsed.rows;
         detectedSemester = parsed.semester;
-        defaultClassName = parsed.className;
+        detectedClassName = parsed.className;
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -122,7 +121,7 @@ class _ClassesScreenState extends State<ClassesScreen> {
         final studentName = parts.sublist(1).join(' ').trim().replaceAll('"', '');
         if (no.isEmpty || studentName.isEmpty) continue;
         if (RegExp(r'^[a-zA-ZçÇğĞıİöÖşŞüÜ]').hasMatch(no)) continue; // başlık satırı
-        rows.add((no, studentName, null, null));
+        rows.add(ImportRow(no: no, name: studentName));
       }
     }
 
@@ -134,31 +133,39 @@ class _ClassesScreenState extends State<ClassesScreen> {
       }
       return;
     }
-    final targetClass = selectedClass!;
+    // Dosyada sınıf adı algılandıysa onu kullan (otomatik tanır); yoksa
+    // ekranda seçili olan sınıfa düş.
+    final targetClass = detectedClassName ?? selectedClass;
+    if (targetClass == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Sınıf adı dosyadan algılanamadı. Lütfen önce bir sınıf seçin.')));
+      }
+      return;
+    }
     final err = await context
         .read<AppState>()
         .importStudentsToClass(targetClass, rows, semester: detectedSemester);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(err ?? '✓ ${rows.length} satır işlendi')));
-      if (defaultClassName != null && defaultClassName != targetClass) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                'Not: Dosyadaki sınıf adı "$defaultClassName" idi, öğrenciler "$targetClass" sınıfına eklendi.')));
-      }
+          content: Text(err ?? '✓ ${rows.length} satır işlendi (sınıf: $targetClass)')));
+      setState(() => selectedClass = targetClass);
     }
   }
 
   // e-Okul "Puan Çizelgesi" / "Puan/Not Çizelgesi" .xls formatını okur.
-  // Sütunları isimle (Y1/Y2 hücre metniyle) bulur — merge'lenmiş hücreler
-  // nedeniyle sabit sütun indeksine güvenmek hataya açık olurdu.
-  ({List<(String, String, double?, double?)> rows, int? semester, String? className})
-      _parseEokulXls(String path) {
+  // Sütunları isimle (Y1/Y2/P1/P2/Proje hücre metniyle) bulur — merge'lenmiş
+  // hücreler nedeniyle sabit sütun indeksine güvenmek hataya açık olurdu.
+  // Not Defteri şeması sadece 2 yazılı + 2 performans + 2 proje destekliyor;
+  // dosyada bundan fazlası varsa (Y3-Y5, P3, U2/U3) sessizce atlanır.
+  ({List<ImportRow> rows, int? semester, String? className}) _parseEokulXls(String path) {
     final reader = XlsReader(path);
     reader.open();
     final sheet = reader.sheet(0);
 
-    int headerRow = -1, colY1 = -1, colY2 = -1;
+    int headerRow = -1;
+    int colY1 = -1, colY2 = -1, colP1 = -1, colP2 = -1, colProje = -1, colU1 = -1;
     String className = '';
     int? semester;
     for (int r = sheet.firstRow; r <= sheet.lastRow; r++) {
@@ -170,7 +177,13 @@ class _ClassesScreenState extends State<ClassesScreen> {
           headerRow = r;
           colY1 = c;
         }
-        if (s == 'Y2' && r == headerRow) colY2 = c;
+        if (r == headerRow) {
+          if (s == 'Y2') colY2 = c;
+          if (s == 'P1') colP1 = c;
+          if (s == 'P2') colP2 = c;
+          if (s == 'Proje') colProje = c;
+          if (s == 'U1') colU1 = c;
+        }
         if (RegExp(r'Sınıfı\s*/\s*Şubesi').hasMatch(s)) {
           for (int cc = c; cc <= sheet.lastCol; cc++) {
             final v2 = sheet.cell(r, cc);
@@ -191,7 +204,22 @@ class _ClassesScreenState extends State<ClassesScreen> {
       throw 'e-Okul formatı tanınamadı (Y1 sütunu bulunamadı).';
     }
 
-    final rows = <(String, String, double?, double?)>[];
+    // e-Okul'da bazı sütunlar (özellikle U1-U3) bazen "Ağırlıklı Puan" gibi
+    // 0-100 aralığı dışında değerler taşıyabiliyor — bunları not olarak kabul
+    // etmemek için aralık dışı değerleri reddediyoruz.
+    double? toScore(dynamic v) {
+      if (v == null) return null;
+      double? d;
+      if (v is num) {
+        d = v.toDouble();
+      } else {
+        d = double.tryParse(v.toString());
+      }
+      if (d == null || d < 0 || d > 100) return null;
+      return d;
+    }
+
+    final rows = <ImportRow>[];
     for (int r = headerRow + 1; r <= sheet.lastRow; r++) {
       final noV = sheet.cell(r, 1);
       final nameV = sheet.cell(r, 2);
@@ -202,14 +230,16 @@ class _ClassesScreenState extends State<ClassesScreen> {
       if (no.isEmpty || studentName.isEmpty || !RegExp(r'^\d+$').hasMatch(no)) {
         continue;
       }
-      final y1v = sheet.cell(r, colY1);
-      final y2v = colY2 >= 0 ? sheet.cell(r, colY2) : null;
-      double? toDouble(dynamic v) {
-        if (v == null) return null;
-        if (v is num) return v.toDouble();
-        return double.tryParse(v.toString());
-      }
-      rows.add((no, studentName, toDouble(y1v), toDouble(y2v)));
+      rows.add(ImportRow(
+        no: no,
+        name: studentName,
+        y1: toScore(sheet.cell(r, colY1)),
+        y2: colY2 >= 0 ? toScore(sheet.cell(r, colY2)) : null,
+        perf1: colP1 >= 0 ? toScore(sheet.cell(r, colP1)) : null,
+        perf2: colP2 >= 0 ? toScore(sheet.cell(r, colP2)) : null,
+        proje1: colProje >= 0 ? toScore(sheet.cell(r, colProje)) : null,
+        proje2: colU1 >= 0 ? toScore(sheet.cell(r, colU1)) : null,
+      ));
     }
     return (rows: rows, semester: semester, className: className.isEmpty ? null : className);
   }

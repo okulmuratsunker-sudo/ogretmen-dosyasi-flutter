@@ -1,3 +1,25 @@
+class ImportRow {
+  final String no;
+  final String name;
+  final double? y1;
+  final double? y2;
+  final double? perf1;
+  final double? perf2;
+  final double? proje1;
+  final double? proje2;
+
+  ImportRow({
+    required this.no,
+    required this.name,
+    this.y1,
+    this.y2,
+    this.perf1,
+    this.perf2,
+    this.proje1,
+    this.proje2,
+  });
+}
+
 class SchoolClass {
   final String id;
   final String name;
