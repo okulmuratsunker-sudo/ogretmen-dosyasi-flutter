@@ -280,6 +280,15 @@ class _ClassesScreenState extends State<ClassesScreen> {
                     FilledButton(onPressed: _createClass, child: const Text('+ Oluştur')),
                   ],
                 ),
+                const SizedBox(height: 12),
+                const Text('veya', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _importExcel,
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text(
+                      'Excel/CSV/XLS Yükle (e-Okul dosyası ise sınıfı otomatik tanır)'),
+                ),
               ],
             ),
           ),
