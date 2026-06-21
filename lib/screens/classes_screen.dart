@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:excel2003/excel2003.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -78,44 +79,139 @@ class _ClassesScreenState extends State<ClassesScreen> {
     if (selectedClass == null) return;
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['csv', 'txt'],
+      allowedExtensions: ['csv', 'txt', 'xls'],
       withData: true,
     );
     if (result == null) return;
-    final bytes = result.files.single.bytes;
-    if (bytes == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Dosya okunamadı.')));
+    final path = result.files.single.path;
+    final name = result.files.single.name.toLowerCase();
+
+    List<(String, String, double?, double?)> rows;
+    int? detectedSemester;
+    String? defaultClassName;
+
+    if (name.endsWith('.xls') && path != null) {
+      try {
+        final parsed = _parseEokulXls(path);
+        rows = parsed.rows;
+        detectedSemester = parsed.semester;
+        defaultClassName = parsed.className;
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('XLS dosyası okunamadı: $e')));
+        }
+        return;
       }
-      return;
+    } else {
+      final bytes = result.files.single.bytes;
+      if (bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('Dosya okunamadı.')));
+        }
+        return;
+      }
+      final text = utf8.decode(bytes, allowMalformed: true);
+      final lines = text.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty);
+      rows = [];
+      for (final line in lines) {
+        final parts = line.split(RegExp(r'[,;\t]'));
+        if (parts.length < 2) continue;
+        final no = parts[0].trim();
+        final studentName = parts.sublist(1).join(' ').trim().replaceAll('"', '');
+        if (no.isEmpty || studentName.isEmpty) continue;
+        if (RegExp(r'^[a-zA-ZçÇğĞıİöÖşŞüÜ]').hasMatch(no)) continue; // başlık satırı
+        rows.add((no, studentName, null, null));
+      }
     }
-    final text = utf8.decode(bytes, allowMalformed: true);
-    final lines = text.split(RegExp(r'\r?\n')).where((l) => l.trim().isNotEmpty);
-    final rows = <(String, String)>[];
-    for (final line in lines) {
-      final parts = line.split(RegExp(r'[,;\t]'));
-      if (parts.length < 2) continue;
-      final no = parts[0].trim();
-      final name = parts.sublist(1).join(' ').trim().replaceAll('"', '');
-      if (no.isEmpty || name.isEmpty) continue;
-      if (RegExp(r'^[a-zA-ZçÇğĞıİöÖşŞüÜ]').hasMatch(no)) continue; // başlık satırı
-      rows.add((no, name));
-    }
+
     if (rows.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
-                'Geçerli satır bulunamadı. Format: Numara,Ad Soyad (her satırda bir öğrenci)')));
+                'Geçerli satır bulunamadı. CSV format: Numara,Ad Soyad (her satırda bir öğrenci)')));
       }
       return;
     }
-    final err =
-        await context.read<AppState>().importStudentsToClass(selectedClass!, rows);
+    final targetClass = selectedClass!;
+    final err = await context
+        .read<AppState>()
+        .importStudentsToClass(targetClass, rows, semester: detectedSemester);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(err ?? '✓ ${rows.length} satır işlendi')));
+      if (defaultClassName != null && defaultClassName != targetClass) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Not: Dosyadaki sınıf adı "$defaultClassName" idi, öğrenciler "$targetClass" sınıfına eklendi.')));
+      }
     }
+  }
+
+  // e-Okul "Puan Çizelgesi" / "Puan/Not Çizelgesi" .xls formatını okur.
+  // Sütunları isimle (Y1/Y2 hücre metniyle) bulur — merge'lenmiş hücreler
+  // nedeniyle sabit sütun indeksine güvenmek hataya açık olurdu.
+  ({List<(String, String, double?, double?)> rows, int? semester, String? className})
+      _parseEokulXls(String path) {
+    final reader = XlsReader(path);
+    reader.open();
+    final sheet = reader.sheet(0);
+
+    int headerRow = -1, colY1 = -1, colY2 = -1;
+    String className = '';
+    int? semester;
+    for (int r = sheet.firstRow; r <= sheet.lastRow; r++) {
+      for (int c = sheet.firstCol; c <= sheet.lastCol; c++) {
+        final v = sheet.cell(r, c);
+        if (v == null) continue;
+        final s = v.toString().trim();
+        if (s == 'Y1') {
+          headerRow = r;
+          colY1 = c;
+        }
+        if (s == 'Y2' && r == headerRow) colY2 = c;
+        if (RegExp(r'Sınıfı\s*/\s*Şubesi').hasMatch(s)) {
+          for (int cc = c; cc <= sheet.lastCol; cc++) {
+            final v2 = sheet.cell(r, cc);
+            if (v2 != null && v2.toString().contains(':')) {
+              className = v2.toString().replaceAll(':', '').trim();
+              break;
+            }
+          }
+        }
+        if (semester == null) {
+          final m = RegExp(r'(I{1,2})\.\s*DÖNEM\s*PUAN', caseSensitive: false)
+              .firstMatch(s);
+          if (m != null) semester = m.group(1)!.toUpperCase() == 'II' ? 2 : 1;
+        }
+      }
+    }
+    if (headerRow < 0 || colY1 < 0) {
+      throw 'e-Okul formatı tanınamadı (Y1 sütunu bulunamadı).';
+    }
+
+    final rows = <(String, String, double?, double?)>[];
+    for (int r = headerRow + 1; r <= sheet.lastRow; r++) {
+      final noV = sheet.cell(r, 1);
+      final nameV = sheet.cell(r, 2);
+      if (noV == null || nameV == null) continue;
+      final noStr = noV.toString().trim();
+      final no = noStr.endsWith('.0') ? noStr.substring(0, noStr.length - 2) : noStr;
+      final studentName = nameV.toString().trim();
+      if (no.isEmpty || studentName.isEmpty || !RegExp(r'^\d+$').hasMatch(no)) {
+        continue;
+      }
+      final y1v = sheet.cell(r, colY1);
+      final y2v = colY2 >= 0 ? sheet.cell(r, colY2) : null;
+      double? toDouble(dynamic v) {
+        if (v == null) return null;
+        if (v is num) return v.toDouble();
+        return double.tryParse(v.toString());
+      }
+      rows.add((no, studentName, toDouble(y1v), toDouble(y2v)));
+    }
+    return (rows: rows, semester: semester, className: className.isEmpty ? null : className);
   }
 
   @override

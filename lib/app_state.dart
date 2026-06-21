@@ -399,35 +399,56 @@ class AppState extends ChangeNotifier {
   }
 
   Future<String?> importStudentsToClass(
-      String className, List<(String no, String name)> rows) async {
+      String className, List<(String no, String name, double? y1, double? y2)> rows,
+      {int? semester}) async {
     int added = 0;
+    int gradesWritten = 0;
     final dups = <String>[];
-    for (final (no, name) in rows) {
-      final exists = students.any(
-          (s) => s.className == className && s.studentNumber == no);
-      if (exists) {
+    for (final (no, name, y1, y2) in rows) {
+      final existing = students
+          .where((s) => s.className == className && s.studentNumber == no)
+          .toList();
+      String? studentId;
+      if (existing.isNotEmpty) {
         dups.add(no);
-        continue;
+        studentId = existing.first.id;
+      } else {
+        try {
+          final data = await supabase
+              .from('teacher_students')
+              .insert({
+                'name': name,
+                'student_number': no,
+                'class_name': className,
+              })
+              .select()
+              .single();
+          final st = Student.fromMap(data);
+          students.add(st);
+          studentId = st.id;
+          added++;
+        } catch (e) {
+          dups.add('$no (hata)');
+          continue;
+        }
       }
-      try {
-        final data = await supabase
-            .from('teacher_students')
-            .insert({
-              'name': name,
-              'student_number': no,
-              'class_name': className,
-            })
-            .select()
-            .single();
-        students.add(Student.fromMap(data));
-        added++;
-      } catch (e) {
-        dups.add('$no (hata)');
+      if (semester != null) {
+        if (y1 != null) {
+          final err = await saveGrade(studentId, semester, 'w1', y1);
+          if (err == null) gradesWritten++;
+        }
+        if (y2 != null) {
+          final err = await saveGrade(studentId, semester, 'w2', y2);
+          if (err == null) gradesWritten++;
+        }
       }
     }
     notifyListeners();
     if (added == 0 && dups.isEmpty) return 'Geçerli satır bulunamadı';
-    return null;
+    var msg = '✓ $added yeni öğrenci eklendi';
+    if (gradesWritten > 0) msg += ', $gradesWritten not Not Defteri\'ne işlendi';
+    if (dups.isNotEmpty) msg += '. Mevcut/atlanan: ${dups.join(', ')}';
+    return msg;
   }
 
   Future<String?> deleteStudent(String studentId) async {
