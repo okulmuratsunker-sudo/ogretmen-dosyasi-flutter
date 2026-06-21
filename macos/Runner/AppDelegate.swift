@@ -8,6 +8,9 @@ class AppDelegate: FlutterAppDelegate {
   }
 
   override func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-    return true
+    // false: macOS önceki (bozuk/taşmış) pencere konum-boyutunu hatırlayıp
+    // geri yüklemesin — MainFlutterWindow'da ayarlanan boyut her açılışta
+    // geçerli olsun.
+    return false
   }
 }

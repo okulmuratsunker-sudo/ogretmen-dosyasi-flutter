@@ -65,9 +65,11 @@ class _GradesScreenState extends State<GradesScreen> {
         ),
         Expanded(
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: DataTable(
+            scrollDirection: Axis.vertical,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: DataTable(
               columns: [
                 const DataColumn(label: Text('Öğrenci')),
                 const DataColumn(label: Text('No')),
@@ -93,6 +95,7 @@ class _GradesScreenState extends State<GradesScreen> {
                     })),
                   ]),
               ],
+              ),
             ),
           ),
         ),
