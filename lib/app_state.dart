@@ -151,6 +151,10 @@ class AppState extends ChangeNotifier {
 
   Future<String?> saveGrade(
       String studentId, int semester, String col, double? value) async {
+    // Güvenlik: sadece izin verilen sütun adlarını kabul et
+    const allowedCols = {'w1', 'w2', 'oral', 'perf', 'perf2', 'project', 'proj2'};
+    if (!allowedCols.contains(col)) return 'Geçersiz not sütunu';
+
     if (value != null && (value < 0 || value > 100)) {
       return 'Not 0-100 arasında olmalı';
     }

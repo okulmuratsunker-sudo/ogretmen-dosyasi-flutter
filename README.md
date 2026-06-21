@@ -20,9 +20,18 @@ flutter run
 
 Supabase bağlantı bilgileri `lib/constants.dart` içinde tanımlı.
 
-## Backend
-- Supabase project ref: `hnshsiflnlzqxxaaqnow`
-- Tablolar: `teacher_students`, `teacher_grades`, `student_scores`,
-  `score_history`, `exam_questions`, `question_scores`, `teacher_plans`,
-  `teacher_schedule`, `teacher_photos`
-- Tüm tablolarda RLS açık, sadece giriş yapmış kullanıcılar erişebilir.
+## Local geliştirme
+Bu repoda doğrudan gizli anahtarlar saklanmamalıdır. Local geliştirme için şu adımları öneririz:
+
+1. Depo kökünde bir `.env` dosyası oluşturun (bu dosyayı versiyona eklememek için .gitignore zaten güncellenecek):
+
+```
+SUPABASE_URL=https://<your-ref>.supabase.co
+SUPABASE_ANON_KEY=eyJ... (anon key)
+```
+
+2. Uygulama içinde `flutter_dotenv` veya benzeri bir yöntemle bu değişkenleri yükleyin ve `lib/constants.dart` içindeki sabit anahtarları kullanmak yerine ortam değişkenlerini okuyun.
+
+3. Eğer mevcut anahtarlar repoda ifşa olduysa Supabase kontrol panelinden anahtarları rotasyon (yenileme) yapın.
+
+Not: README'deki `hnshsiflnlzqxxaaqnow` ref ile `lib/constants.dart` içindeki URL çelişebilir; hangi Supabase projesini kullandığınızı netleştirip README'i ona göre güncelleyin.
