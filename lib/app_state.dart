@@ -126,7 +126,7 @@ class AppState extends ChangeNotifier {
             .from('teacher_plans')
             .select()
             .order('created_at', ascending: false),
-        supabase.from('classes').select().order('name'),
+        supabase.from('teacher_classes').select().order('name'),
         supabase.from('nm_classroom_scores').select(),
       ]);
       students =
@@ -335,7 +335,7 @@ class AppState extends ChangeNotifier {
     if (classNames.contains(name)) return 'Bu sınıf zaten var';
     try {
       final data =
-          await supabase.from('classes').insert({'name': name}).select().single();
+          await supabase.from('teacher_classes').insert({'name': name}).select().single();
       classes.add(SchoolClass.fromMap(data));
       notifyListeners();
       return null;
@@ -365,7 +365,7 @@ class AppState extends ChangeNotifier {
       classroomScores.removeWhere((c) => ids.contains(c.studentId));
       final classRow = classes.where((c) => c.name == name).toList();
       if (classRow.isNotEmpty) {
-        await supabase.from('classes').delete().eq('id', classRow.first.id);
+        await supabase.from('teacher_classes').delete().eq('id', classRow.first.id);
         classes.removeWhere((c) => c.name == name);
       }
       notifyListeners();
