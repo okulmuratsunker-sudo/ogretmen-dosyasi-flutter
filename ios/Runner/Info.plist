@@ -30,6 +30,10 @@
 	<string>Excel/CSV öğrenci listesi dosyası seçebilmek için fotoğraf kitaplığına erişim gerekebilir.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Excel/CSV öğrenci listesi dosyalarını seçebilmek için dosyalara erişim gerekiyor.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Bu uygulama kamera kullanmaz; dosya seçici kütüphanesi bu izni sistemde tanımlı olarak gerektiriyor.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Bu uygulama konum kullanmaz; dosya seçici kütüphanesi bu izni sistemde tanımlı olarak gerektiriyor.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
