@@ -77,6 +77,10 @@ class _StudentsScreenState extends State<StudentsScreen> {
                             Chip(
                                 label: Text(
                                     '${sc >= 0 ? '+' : ''}${sc.toStringAsFixed(0)} ⭐')),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => _confirmDelete(context, st),
+                            ),
                           ],
                         ),
                         onTap: () => _showStudentSheet(context, st),
@@ -95,6 +99,30 @@ class _StudentsScreenState extends State<StudentsScreen> {
       isScrollControlled: true,
       builder: (context) => _StudentDetailSheet(student: st),
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, Student st) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Öğrenciyi Sil'),
+        content: Text(
+            '"${st.name}" öğrencisini ve TÜM notlarını/puanlarını kalıcı olarak silmek istiyor musunuz? Bu işlem geri alınamaz.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('İptal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Sil')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final err = await context.read<AppState>().deleteStudent(st.id);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err == null ? '✓ ${st.name} silindi' : 'Hata: $err')));
+    }
   }
 }
 

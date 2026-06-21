@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
 
@@ -26,7 +30,7 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
   @override
   void initState() {
     super.initState();
-    tabController = TabController(length: 3, vsync: this);
+    tabController = TabController(length: 5, vsync: this);
   }
 
   void _checkNumber(AppState s) {
@@ -128,10 +132,13 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
       children: [
         TabBar(
           controller: tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Yazılı Giriş'),
             Tab(text: 'Sözlü Hesaplama'),
             Tab(text: 'Not Listesi'),
+            Tab(text: 'E-Okul Kopyalama'),
+            Tab(text: 'Dışa Aktarma'),
           ],
         ),
         Expanded(
@@ -154,6 +161,8 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
                     _writtenEntryTab(s, classes),
                     _oralCalcTab(s, classes),
                     _gradeListTab(s, classes),
+                    _eokulCopyTab(s, classes),
+                    _exportTab(s, classes),
                   ],
                 ),
         ),
@@ -486,6 +495,124 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
     if (mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(err ?? '✓ Notlar sıfırlandı')));
+    }
+  }
+
+  String eokulField = 'w1';
+
+  Widget _eokulCopyTab(AppState s, List<String> classes) {
+    final list = selectedClass != null ? s.studentsInClass(selectedClass!) : [];
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _classAndSemSelector(classes),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<String>(
+          initialValue: eokulField,
+          decoration: const InputDecoration(labelText: 'Kopyalanacak Alan'),
+          items: const [
+            DropdownMenuItem(value: 'w1', child: Text('1. Yazılı')),
+            DropdownMenuItem(value: 'w2', child: Text('2. Yazılı')),
+            DropdownMenuItem(value: 'avg', child: Text('Yazılı Ortalaması')),
+            DropdownMenuItem(value: 'oral', child: Text('Sözlü')),
+            DropdownMenuItem(value: 'classroom', child: Text('Classroom Puanı')),
+          ],
+          onChanged: (v) => setState(() => eokulField = v ?? 'w1'),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          icon: const Icon(Icons.copy),
+          label: const Text('📋 Panoya Kopyala'),
+          onPressed: () => _copyColumn(s, list),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+            'Seçilen alan, okul numarasına göre sıralı tek sütun olarak panoya kopyalanır — e-Okul\'a doğrudan yapıştırmaya uygundur.',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Future<void> _copyColumn(AppState s, List list) async {
+    if (selectedClass == null) return;
+    int emptyCount = 0;
+    final lines = list.map((st) {
+      dynamic v;
+      if (eokulField == 'avg') {
+        v = s.writtenAvg(st.id, sem);
+      } else if (eokulField == 'classroom') {
+        v = s.classroomScoreFor(st.id, sem)?.classroomScore;
+      } else {
+        final g = s.gradeFor(st.id, sem);
+        v = eokulField == 'oral' ? g?.oral : (eokulField == 'w1' ? g?.w1 : g?.w2);
+      }
+      if (v == null) {
+        emptyCount++;
+        return '';
+      }
+      return v is double ? v.toStringAsFixed(0) : v.toString();
+    }).join('\n');
+    await Clipboard.setData(ClipboardData(text: lines));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(emptyCount > 0
+              ? '✓ Kopyalandı ($emptyCount öğrencide bu not eksik, boş satır olarak korundu)'
+              : '✓ Panoya kopyalandı')));
+    }
+  }
+
+  Widget _exportTab(AppState s, List<String> classes) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _classAndSemSelector(classes),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          icon: const Icon(Icons.download),
+          label: const Text('📄 CSV Olarak Dışa Aktar'),
+          onPressed: () => _exportCsv(s),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+            'Seçilen sınıfın okul numarasına göre sıralı tam not listesi CSV dosyası olarak indirilir.',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+
+  Future<void> _exportCsv(AppState s) async {
+    if (selectedClass == null) return;
+    final list = s.studentsInClass(selectedClass!);
+    final rows = <List<String>>[
+      ['Okul No', 'Ad Soyad', 'Sınıf', '1.Yazılı', '2.Yazılı', 'Yazılı Ort.', 'Classroom', 'Sözlü']
+    ];
+    for (final st in list) {
+      final g = s.gradeFor(st.id, sem);
+      rows.add([
+        st.studentNumber ?? '',
+        st.name,
+        st.className ?? '',
+        g?.w1?.toStringAsFixed(0) ?? '',
+        g?.w2?.toStringAsFixed(0) ?? '',
+        s.writtenAvg(st.id, sem)?.toStringAsFixed(1) ?? '',
+        s.classroomScoreFor(st.id, sem)?.classroomScore?.toStringAsFixed(0) ?? '',
+        g?.oral?.toStringAsFixed(0) ?? '',
+      ]);
+    }
+    final csv = rows
+        .map((r) => r.map((c) => '"${c.replaceAll('"', '""')}"').join(','))
+        .join('\r\n');
+    final savePath = await FilePicker.platform.saveFile(
+      fileName: 'not-merkezi-$selectedClass-d$sem.csv',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (savePath == null) return;
+    final file = File(savePath.endsWith('.csv') ? savePath : '$savePath.csv');
+    await file.writeAsString('﻿$csv', encoding: const Utf8Codec());
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('✓ Kaydedildi: ${file.path}')));
     }
   }
 }
