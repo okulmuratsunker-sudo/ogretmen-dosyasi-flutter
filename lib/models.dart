@@ -20,6 +20,76 @@ class ImportRow {
   });
 }
 
+// Performans Değerlendirme Ölçeği: ölçüt isimleri sabit, sadece ağırlık
+// (max puan) sınıf bazında değişken.
+const Map<String, List<String>> kPerfCriteria = {
+  'katilim': [
+    'Derse Hazırlık',
+    'Devam',
+    'Aktif Katılım',
+    'Örnek Davranışlar',
+    'Okuryazarlık Becerileri ve Kitap Okumaları',
+  ],
+  'calisma': [
+    'İçerik',
+    'Düzenleme',
+    'Dilbilgisi',
+    'Kişisel Yansıma, Orjinallik',
+    'Zamanında Tamamlama',
+  ],
+};
+
+class PerfWeight {
+  final String id;
+  final String className;
+  final String group;
+  final int index;
+  double maxPoints;
+
+  PerfWeight({
+    required this.id,
+    required this.className,
+    required this.group,
+    required this.index,
+    required this.maxPoints,
+  });
+
+  factory PerfWeight.fromMap(Map<String, dynamic> m) => PerfWeight(
+        id: m['id'],
+        className: m['class_name'],
+        group: m['criterion_group'],
+        index: m['criterion_index'],
+        maxPoints: (m['max_points'] as num).toDouble(),
+      );
+}
+
+class PerfScore {
+  final String id;
+  final String studentId;
+  final int semester;
+  final String group;
+  final int index;
+  double? score;
+
+  PerfScore({
+    required this.id,
+    required this.studentId,
+    required this.semester,
+    required this.group,
+    required this.index,
+    this.score,
+  });
+
+  factory PerfScore.fromMap(Map<String, dynamic> m) => PerfScore(
+        id: m['id'],
+        studentId: m['student_id'],
+        semester: m['semester'],
+        group: m['criterion_group'],
+        index: m['criterion_index'],
+        score: (m['score'] as num?)?.toDouble(),
+      );
+}
+
 class SchoolClass {
   final String id;
   final String name;

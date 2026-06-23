@@ -14,6 +14,8 @@ class AppState extends ChangeNotifier {
   List<LessonPlan> plans = [];
   List<SchoolClass> classes = [];
   List<ClassroomScore> classroomScores = [];
+  List<PerfWeight> perfWeights = [];
+  List<PerfScore> perfScores = [];
   bool loading = false;
 
   List<String> get classNames {
@@ -128,6 +130,8 @@ class AppState extends ChangeNotifier {
             .order('created_at', ascending: false),
         supabase.from('teacher_classes').select().order('name'),
         supabase.from('nm_classroom_scores').select(),
+        supabase.from('perf_criteria_weights').select(),
+        supabase.from('perf_criteria_scores').select(),
       ]);
       students =
           (results[0] as List).map((e) => Student.fromMap(e)).toList();
@@ -143,6 +147,8 @@ class AppState extends ChangeNotifier {
       classes = (results[7] as List).map((e) => SchoolClass.fromMap(e)).toList();
       classroomScores =
           (results[8] as List).map((e) => ClassroomScore.fromMap(e)).toList();
+      perfWeights = (results[9] as List).map((e) => PerfWeight.fromMap(e)).toList();
+      perfScores = (results[10] as List).map((e) => PerfScore.fromMap(e)).toList();
     } finally {
       loading = false;
       notifyListeners();
@@ -588,5 +594,126 @@ class AppState extends ChangeNotifier {
     } catch (e) {
       return e.toString();
     }
+  }
+
+  // ── Performans Değerlendirme Ölçeği ──
+  double perfWeight(String className, String group, int index) {
+    final w = perfWeights.where((x) =>
+        x.className == className && x.group == group && x.index == index);
+    return w.isEmpty ? 20 : w.first.maxPoints;
+  }
+
+  Future<String?> setPerfWeight(
+      String className, String group, int index, double value) async {
+    try {
+      final existing = perfWeights.where(
+          (x) => x.className == className && x.group == group && x.index == index);
+      if (existing.isNotEmpty) {
+        await supabase
+            .from('perf_criteria_weights')
+            .update({'max_points': value})
+            .eq('id', existing.first.id);
+        existing.first.maxPoints = value;
+      } else {
+        final data = await supabase
+            .from('perf_criteria_weights')
+            .insert({
+              'class_name': className,
+              'criterion_group': group,
+              'criterion_index': index,
+              'max_points': value,
+            })
+            .select()
+            .single();
+        perfWeights.add(PerfWeight.fromMap(data));
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  double? perfScore(String studentId, int semester, String group, int index) {
+    final s = perfScores.where((x) =>
+        x.studentId == studentId &&
+        x.semester == semester &&
+        x.group == group &&
+        x.index == index);
+    return s.isEmpty ? null : s.first.score;
+  }
+
+  Future<String?> setPerfScore(String studentId, int semester, String group,
+      int index, double maxPoints, double? value) async {
+    var v = value;
+    if (v != null && v < 0) return 'Puan negatif olamaz';
+    if (v != null && v > maxPoints) v = maxPoints;
+    try {
+      final existing = perfScores.where((x) =>
+          x.studentId == studentId &&
+          x.semester == semester &&
+          x.group == group &&
+          x.index == index);
+      if (v == null) {
+        if (existing.isNotEmpty) {
+          await supabase.from('perf_criteria_scores').delete().eq('id', existing.first.id);
+          perfScores.removeWhere((x) => x.id == existing.first.id);
+        }
+      } else if (existing.isNotEmpty) {
+        await supabase
+            .from('perf_criteria_scores')
+            .update({'score': v})
+            .eq('id', existing.first.id);
+        existing.first.score = v;
+      } else {
+        final data = await supabase
+            .from('perf_criteria_scores')
+            .insert({
+              'student_id': studentId,
+              'semester': semester,
+              'criterion_group': group,
+              'criterion_index': index,
+              'score': v,
+            })
+            .select()
+            .single();
+        perfScores.add(PerfScore.fromMap(data));
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  double? perfTotal(String studentId, int semester, String group) {
+    double total = 0;
+    bool any = false;
+    for (var i = 1; i <= 5; i++) {
+      final v = perfScore(studentId, semester, group, i);
+      if (v != null) {
+        total += v;
+        any = true;
+      }
+    }
+    return any ? total : null;
+  }
+
+  Future<String> applyPerfToGradebook(String className, int semester) async {
+    final list = studentsInClass(className);
+    int applied = 0;
+    for (final st in list) {
+      final katilim = perfTotal(st.id, semester, 'katilim');
+      final calisma = perfTotal(st.id, semester, 'calisma');
+      if (katilim != null) {
+        final err = await saveGrade(st.id, semester, 'perf', katilim);
+        if (err == null) applied++;
+      }
+      if (calisma != null) {
+        final err = await saveGrade(st.id, semester, 'perf2', calisma);
+        if (err == null) applied++;
+      }
+    }
+    return '✓ $applied not Not Defteri\'ne (Perf.1/Perf.2) işlendi';
   }
 }

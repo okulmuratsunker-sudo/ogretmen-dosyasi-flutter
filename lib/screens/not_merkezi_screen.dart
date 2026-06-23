@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
+import '../models.dart';
 
 class NotMerkeziScreen extends StatefulWidget {
   const NotMerkeziScreen({super.key});
@@ -19,6 +20,8 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
   String? selectedClass;
   int sem = 1;
   String examType = 'w1';
+  String perfGroup = 'katilim';
+  String perfView = 'agirlik';
 
   final noCtrl = TextEditingController();
   final valCtrl = TextEditingController();
@@ -30,7 +33,7 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
   @override
   void initState() {
     super.initState();
-    tabController = TabController(length: 5, vsync: this);
+    tabController = TabController(length: 6, vsync: this);
   }
 
   void _checkNumber(AppState s) {
@@ -136,6 +139,7 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
           tabs: const [
             Tab(text: 'Yazılı Giriş'),
             Tab(text: 'Sözlü Hesaplama'),
+            Tab(text: 'Performans Ölçeği'),
             Tab(text: 'Not Listesi'),
             Tab(text: 'E-Okul Kopyalama'),
             Tab(text: 'Dışa Aktarma'),
@@ -160,6 +164,7 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
                   children: [
                     _writtenEntryTab(s, classes),
                     _oralCalcTab(s, classes),
+                    _perfRubricTab(s, classes),
                     _gradeListTab(s, classes),
                     _eokulCopyTab(s, classes),
                     _exportTab(s, classes),
@@ -614,5 +619,207 @@ class _NotMerkeziScreenState extends State<NotMerkeziScreen>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('✓ Kaydedildi: ${file.path}')));
     }
+  }
+
+  // ── Performans Değerlendirme Ölçeği ──
+  Widget _perfRubricTab(AppState s, List<String> classes) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _classAndSemSelector(classes),
+        const SizedBox(height: 12),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'katilim', label: Text('Katılım → Perf.1')),
+            ButtonSegment(value: 'calisma', label: Text('Çalışma → Perf.2')),
+          ],
+          selected: {perfGroup},
+          onSelectionChanged: (v) => setState(() => perfGroup = v.first),
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'agirlik', label: Text('① Ağırlıkları Ayarla')),
+            ButtonSegment(value: 'giris', label: Text('② Not Gir')),
+          ],
+          selected: {perfView},
+          onSelectionChanged: (v) => setState(() => perfView = v.first),
+        ),
+        const SizedBox(height: 16),
+        if (selectedClass != null)
+          perfView == 'agirlik'
+              ? _perfWeightsCard(s, selectedClass!, perfGroup)
+              : _perfEntryTable(s, selectedClass!, sem, perfGroup),
+      ],
+    );
+  }
+
+  Widget _perfWeightsCard(AppState s, String className, String group) {
+    final criteria = kPerfCriteria[group]!;
+    final total = List.generate(5, (i) => s.perfWeight(className, group, i + 1))
+        .fold<double>(0, (a, b) => a + b);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text('"$className" için Ölçüt Ağırlıkları',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                Text('Toplam: ${total.toStringAsFixed(0)}/100',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: total == 100 ? Colors.green : Colors.red)),
+              ],
+            ),
+            if (total != 100)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                    '⚠️ Ağırlıklar toplamı 100 değil — hesaplama yine çalışır ama dönem notuyla orantısı bozulabilir.',
+                    style: TextStyle(color: Colors.red, fontSize: 12)),
+              ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < criteria.length; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(child: Text(criteria[i])),
+                    SizedBox(
+                      width: 80,
+                      child: TextField(
+                        key: ValueKey('$className-$group-$i'),
+                        decoration: const InputDecoration(isDense: true, labelText: 'Maks.'),
+                        keyboardType: TextInputType.number,
+                        controller: TextEditingController(
+                            text: s.perfWeight(className, group, i + 1).toStringAsFixed(0)),
+                        onSubmitted: (v) async {
+                          final n = double.tryParse(v);
+                          if (n == null || n < 0) return;
+                          await s.setPerfWeight(className, group, i + 1, n);
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _perfEntryTable(AppState s, String className, int semester, String group) {
+    final criteria = kPerfCriteria[group]!;
+    final list = s.studentsInClass(className);
+    final maxTotal = List.generate(5, (i) => s.perfWeight(className, group, i + 1))
+        .fold<double>(0, (a, b) => a + b);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FilledButton.icon(
+          icon: const Icon(Icons.download_done),
+          label: const Text('📥 Not Defteri\'ne Aktar (Perf.1/Perf.2)'),
+          onPressed: () async {
+            final msg = await s.applyPerfToGradebook(className, semester);
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+            }
+          },
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            columns: [
+              const DataColumn(label: Text('No')),
+              const DataColumn(label: Text('Ad Soyad')),
+              for (var i = 0; i < criteria.length; i++)
+                DataColumn(
+                    label: Text(
+                        '${criteria[i]}\n/${s.perfWeight(className, group, i + 1).toStringAsFixed(0)}')),
+              const DataColumn(label: Text('Toplam')),
+            ],
+            rows: [
+              for (final st in list)
+                DataRow(cells: [
+                  DataCell(Text(st.studentNumber ?? '—')),
+                  DataCell(Text(st.name)),
+                  for (var i = 0; i < criteria.length; i++)
+                    DataCell(_PerfScoreCell(
+                      key: ValueKey('${st.id}-$semester-$group-$i'),
+                      studentId: st.id,
+                      semester: semester,
+                      group: group,
+                      index: i + 1,
+                      maxPoints: s.perfWeight(className, group, i + 1),
+                    )),
+                  DataCell(Text(
+                      '${s.perfTotal(st.id, semester, group)?.toStringAsFixed(0) ?? '—'}/${maxTotal.toStringAsFixed(0)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold))),
+                ]),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PerfScoreCell extends StatefulWidget {
+  final String studentId;
+  final int semester;
+  final String group;
+  final int index;
+  final double maxPoints;
+  const _PerfScoreCell({
+    super.key,
+    required this.studentId,
+    required this.semester,
+    required this.group,
+    required this.index,
+    required this.maxPoints,
+  });
+
+  @override
+  State<_PerfScoreCell> createState() => _PerfScoreCellState();
+}
+
+class _PerfScoreCellState extends State<_PerfScoreCell> {
+  late TextEditingController ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = context.read<AppState>();
+    final v = s.perfScore(widget.studentId, widget.semester, widget.group, widget.index);
+    ctrl = TextEditingController(text: v?.toStringAsFixed(0) ?? '');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      child: TextField(
+        controller: ctrl,
+        textAlign: TextAlign.center,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+        onSubmitted: (val) async {
+          final nv = val.trim().isEmpty ? null : double.tryParse(val.trim());
+          final err = await context.read<AppState>().setPerfScore(
+              widget.studentId, widget.semester, widget.group, widget.index, widget.maxPoints, nv);
+          if (err != null && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+          }
+        },
+      ),
+    );
   }
 }
