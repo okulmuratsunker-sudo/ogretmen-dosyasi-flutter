@@ -159,13 +159,18 @@ class _ClassesScreenState extends State<ClassesScreen> {
   // hücreler nedeniyle sabit sütun indeksine güvenmek hataya açık olurdu.
   // Not Defteri şeması sadece 2 yazılı + 2 performans + 2 proje destekliyor;
   // dosyada bundan fazlası varsa (Y3-Y5, P3, U2/U3) sessizce atlanır.
+  // ÖNEMLİ: e-Okul'daki "SINAVLAR" bölümünün 5 ortak slotu (Y1-Y5) okulda/
+  // derste serbestçe kullanılıyor: Y1=1.Yazılı, Y2=2.Yazılı, Y3=1.Performans,
+  // Y4=2.Performans, Y5=Proje (varsa). "Performans"/"Uygulama"/"Proje" grup
+  // başlıkları altındaki P1-P3/U1-U3/Proje sütunları ise e-Okul'un kendi
+  // AĞIRLIKLI ORTALAMA hesaplamasıdır (ham not değil) — bilerek okunmuyor.
   ({List<ImportRow> rows, int? semester, String? className}) _parseEokulXls(String path) {
     final reader = XlsReader(path);
     reader.open();
     final sheet = reader.sheet(0);
 
     int headerRow = -1;
-    int colY1 = -1, colY2 = -1, colP1 = -1, colP2 = -1, colProje = -1, colU1 = -1;
+    int colY1 = -1, colY2 = -1, colY3 = -1, colY4 = -1, colY5 = -1;
     String className = '';
     int? semester;
     for (int r = sheet.firstRow; r <= sheet.lastRow; r++) {
@@ -179,10 +184,9 @@ class _ClassesScreenState extends State<ClassesScreen> {
         }
         if (r == headerRow) {
           if (s == 'Y2') colY2 = c;
-          if (s == 'P1') colP1 = c;
-          if (s == 'P2') colP2 = c;
-          if (s == 'Proje') colProje = c;
-          if (s == 'U1') colU1 = c;
+          if (s == 'Y3') colY3 = c;
+          if (s == 'Y4') colY4 = c;
+          if (s == 'Y5') colY5 = c;
         }
         if (RegExp(r'Sınıfı\s*/\s*Şubesi').hasMatch(s)) {
           for (int cc = c; cc <= sheet.lastCol; cc++) {
@@ -235,10 +239,10 @@ class _ClassesScreenState extends State<ClassesScreen> {
         name: studentName,
         y1: toScore(sheet.cell(r, colY1)),
         y2: colY2 >= 0 ? toScore(sheet.cell(r, colY2)) : null,
-        perf1: colP1 >= 0 ? toScore(sheet.cell(r, colP1)) : null,
-        perf2: colP2 >= 0 ? toScore(sheet.cell(r, colP2)) : null,
-        proje1: colProje >= 0 ? toScore(sheet.cell(r, colProje)) : null,
-        proje2: colU1 >= 0 ? toScore(sheet.cell(r, colU1)) : null,
+        perf1: colY3 >= 0 ? toScore(sheet.cell(r, colY3)) : null,
+        perf2: colY4 >= 0 ? toScore(sheet.cell(r, colY4)) : null,
+        proje1: colY5 >= 0 ? toScore(sheet.cell(r, colY5)) : null,
+        proje2: null,
       ));
     }
     return (rows: rows, semester: semester, className: className.isEmpty ? null : className);
