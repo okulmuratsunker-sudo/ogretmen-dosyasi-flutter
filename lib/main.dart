@@ -22,14 +22,78 @@ class OgretmenDosyasiApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Öğretmen Dosyası',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          colorSchemeSeed: const Color(0xFF4F7EF8),
-        ),
+        theme: _buildTheme(),
         home: const RootGate(),
       ),
     );
   }
+}
+
+const kAccent = Color(0xFF4F7EF8);
+const kAccentSoft = Color(0xFFE8F0FF);
+const kBg = Color(0xFFF4F6FB);
+
+ThemeData _buildTheme() {
+  final scheme = ColorScheme.fromSeed(seedColor: kAccent, primary: kAccent);
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: kBg,
+    fontFamily: 'Roboto',
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Colors.white,
+      foregroundColor: Color(0xFF1A1D2E),
+      elevation: 0,
+      surfaceTintColor: Colors.white,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        color: kAccent,
+      ),
+    ),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      color: Colors.white,
+      surfaceTintColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      margin: EdgeInsets.zero,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: kBg,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: kAccent, width: 1.5),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        backgroundColor: kAccent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      ),
+    ),
+    navigationRailTheme: NavigationRailThemeData(
+      backgroundColor: Colors.white,
+      indicatorColor: kAccentSoft,
+      selectedIconTheme: const IconThemeData(color: kAccent),
+      selectedLabelTextStyle: const TextStyle(color: kAccent, fontWeight: FontWeight.w700),
+      unselectedLabelTextStyle: TextStyle(color: Colors.grey.shade600),
+    ),
+    dividerColor: Colors.grey.shade200,
+  );
 }
 
 class RootGate extends StatefulWidget {

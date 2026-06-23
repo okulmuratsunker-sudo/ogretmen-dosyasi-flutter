@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../app_state.dart';
+import '../main.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -22,48 +23,54 @@ class DashboardScreen extends StatelessWidget {
     }).length;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        Text('🏠 Özet',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 12),
+        const Text('🏠 Özet',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1A1D2E))),
+        const SizedBox(height: 16),
         GridView.count(
           crossAxisCount: MediaQuery.of(context).size.width > 700 ? 4 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.4,
+          childAspectRatio: 1.3,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           children: [
-            _StatBox(value: '${s.students.length}', label: 'Öğrenci', color: null),
+            _StatBox(icon: Icons.groups_rounded, value: '${s.students.length}', label: 'Öğrenci', color: kAccent),
             _StatBox(
+                icon: Icons.edit_note_rounded,
                 value: '$missing1',
                 label: '1.Dönem Notu Eksik',
-                color: Colors.orange),
+                color: const Color(0xFFF5A623)),
             _StatBox(
+                icon: Icons.trending_down_rounded,
                 value: '$low',
                 label: '1.Dönem Düşük (<50)',
-                color: Colors.red),
+                color: const Color(0xFFE05252)),
             _StatBox(
-                value: '$noPass', label: 'Yılsonu Kalan', color: Colors.red),
+                icon: Icons.report_problem_rounded,
+                value: '$noPass',
+                label: 'Yılsonu Kalan',
+                color: const Color(0xFFE05252)),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 20),
         Card(
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('📅 Hoş geldiniz',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Text('👋 Hoş geldiniz',
+                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 Text(
-                    'Soldaki menüden öğrenciler, not defteri, madde analizi, puan sistemi ve ders planlarına ulaşabilirsiniz.',
-                    style: TextStyle(color: Colors.grey[600])),
+                    'Soldaki menüden Sınıflarım, Öğrenciler, Not Defteri, Madde Analizi, Puan Sistemi, Ders Planları ve Not Merkezi\'ne ulaşabilirsiniz.',
+                    style: TextStyle(color: Colors.grey[600], height: 1.5, fontSize: 13)),
               ],
             ),
           ),
@@ -74,31 +81,41 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class _StatBox extends StatelessWidget {
+  final IconData icon;
   final String value;
   final String label;
-  final Color? color;
-  const _StatBox({required this.value, required this.label, this.color});
+  final Color color;
+  const _StatBox(
+      {required this.icon, required this.value, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
       ),
-      alignment: Alignment.center,
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 19, color: color),
+          ),
+          const Spacer(),
           Text(value,
-              style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: color ?? Theme.of(context).colorScheme.primary)),
-          const SizedBox(height: 4),
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: color)),
+          const SizedBox(height: 2),
           Text(label,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+              style: TextStyle(fontSize: 11.5, color: Colors.grey[600], fontWeight: FontWeight.w500)),
         ],
       ),
     );
